@@ -1,0 +1,22 @@
+model:
+  name: "databricks-meta-llama-3-70b-instruct"
+  temperature: 0.1
+  max_tokens: 4096
+
+tools:
+  - name: "system.ai.python_exec"
+  - name: "system.ai.sql_exec"
+
+pipeline_templates:
+  default:
+    target_schema: "agent_generated"
+    cluster_id: "serverless"
+    edition: "ADVANCED"
+
+environments:
+  dev:
+    catalog_name: "dev_catalog"
+    volume_path: "/Volumes/dev_catalog/agent_assets"
+  prod:
+    catalog_name: "prod_catalog"
+    volume_path: "/Volumes/prod_catalog/agent_assets"

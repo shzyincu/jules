@@ -1,0 +1,13 @@
+import dlt
+from pyspark.sql.functions import *
+
+{% for table in pipeline.tables %}
+@dlt.table(
+    name="{{ table.name }}",
+    comment="{{ table.description }}"
+)
+def {{ table.name }}():
+    return spark.sql("""
+        {{ table.query }}
+    """)
+{% endfor %}
