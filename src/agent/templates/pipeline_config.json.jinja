@@ -1,0 +1,20 @@
+{
+    "name": "{{ pipeline.pipeline_name }}",
+    "target": "{{ pipeline.target_schema }}",
+    "clusters": [
+        {
+            "label": "default",
+            "autoscale": {
+                "min_workers": 1,
+                "max_workers": 5
+            }
+        }
+    ],
+    "libraries": [
+        {
+            "notebook": {
+                "path": "/Users/{{ current_user }}/generated_pipeline/{{ pipeline.pipeline_name }}.py"
+            }
+        }
+    ]
+}

@@ -1,0 +1,309 @@
+Comprehensive Implementation Architecture for Databricks Agentic AI Delivery
+The implementation of an Agentic AI system within the Databricks Data Intelligence Platform represents a fundamental shift in software engineering paradigms, transitioning from deterministic, rule-based development to probabilistic, data-centric engineering. This report provides an exhaustive, step-by-step technical analysis and implementation guide based on the provided 5-week delivery plan. It synthesizes architectural best practices, specific Databricks capabilities—including Mosaic AI, Unity Catalog, and Delta Live Tables—and advanced software engineering principles to ensure the delivery of a robust, production-grade Agentic AI solution. This analysis not only operationalizes the immediate tasks but also explores second-order implications regarding governance, scalability, and the evolving role of the data engineer in an AI-augmented landscape.
+Phase 1: Foundation and Architectural Provisioning (Week 1)
+The initial phase serves as the bedrock for the entire Agentic AI system. Decisions made during this period regarding architectural patterns, configuration management, and the scaffolding of the agent itself will dictate the system's scalability, maintainability, and ability to handle complex reasoning tasks. The objective is to transition from abstract requirements to a concrete, provisioned environment capable of supporting autonomous code generation and data orchestration.
+1.1 Requirements Gathering and Architecture Provisioning
+The first task, "Requirements Gathering & Architecture Provisioning," transcends simple stakeholder interviews; it involves defining the cognitive architecture of the agent. The research indicates that agent systems on Databricks exist on a continuum of complexity, ranging from deterministic chains to fully autonomous multi-agent systems.1 For an "Agentic AI" project, particularly one involving code generation (DLT pipelines) as implied by later tasks, the architecture must support the agent's ability to perceive, reason, act, and learn.2
+Cognitive Architecture Selection
+The selection of an architectural pattern is a critical decision point. While single-agent patterns are simpler and offer a good "default" for cohesive domains, the complexity of generating production-grade ETL code often necessitates a Multi-Agent Supervisor architecture.1 In this model, a supervisor agent routes requests to specialized sub-agents—one for generating Python code, another for SQL, and a third for validating compliance against Unity Catalog governance rules.1 This modularity reduces context pollution and hallucination risks, as each sub-agent operates within a narrowed scope. The supervisor router utilizes the metadata from Unity Catalog to direct the user query to the appropriate sub-agent, leveraging the platform's understanding of data assets to inform routing decisions.1
+Provisioning the Data Intelligence Platform
+Provisioning involves setting up the fundamental infrastructure components within the Databricks workspace. This is not merely about creating resources but about establishing a governed environment for the agent to operate.
+Unity Catalog (UC) Structure: Unity Catalog is the critical enabler for governance and lineage. The agent must operate within a UC-enabled workspace to leverage "Unity Catalog Functions" as tools.5 The provisioning checklist includes creating a dedicated catalog (e.g., agent_catalog) to isolate the agent's artifacts. Within this catalog, schemas must be defined for input data, output logs, and the agent's own internal state (e.g., agent_catalog.internal.state). Furthermore, Unity Catalog Volumes are essential for storing configuration files, generated code artifacts, and intermediate outputs, allowing the agent to interact with the file system in a governed manner.7
+Vector Search Infrastructure: For Retrieval Augmented Generation (RAG) capabilities, creating a Vector Search endpoint is essential. This allows the agent to retrieve relevant context—such as documentation on DLT syntax, organizational coding standards, or business rules—dynamically.9 The integration of Vector Search with Delta Live Tables ensures that the agent's knowledge base is updated in real-time as source data changes, providing a mechanism for the agent to "learn" from the evolving data landscape without manual retraining.9
+Model Serving and Gateway: The architecture requires provisioning Model Serving endpoints. This includes endpoints for the foundation models (e.g., DBRX, Llama 3, or OpenAI via Gateway) and potentially for the agent itself once deployed.10 The use of Mosaic AI Gateway is recommended to govern external model access, manage rate limits, and provide a unified interface for model interactions.10 This abstraction layer is crucial for future-proofing the system, allowing the underlying models to be swapped without altering the agent's application logic.
+Data Lineage and Identity Management
+A distinct advantage of the Databricks ecosystem is the automatic capture of data lineage. As the agent generates code that creates tables, Unity Catalog will track the flow of data from source to consumption.12 This capability transforms the agent from a "black box" into an auditable component of the data stack. During provisioning, service principals should be created for the agent to ensure that its actions are auditable and distinct from human user actions.14 This separation of identity is critical for meeting the "Auditability" requirement of enterprise AI systems and ensures that the agent's operations can be monitored and governed independently.6
+1.2 Config File Definition
+Task 1.2, "Config File Definition," establishes the contract between the human operator and the AI agent. A robust config.yaml schema is necessary to decouple the agent's logic from specific environment variables and prompt strategies. This configuration-as-code approach aligns with CI/CD best practices and allows the agent's behavior to be tuned without code changes.16
+Schema Design Principles
+The configuration file should be structured to support the varying environments (Dev, Staging, Prod) and the specific parameters required by the Databricks SDK and LLM clients. The schema must be strictly defined, likely using Pydantic, to ensure validation at startup.
+Model Parameters: The config must specify the model endpoint names (e.g., databricks-meta-llama-3-70b-instruct), temperature, and token limits.17 This allows for easy swapping of models—a critical capability given the rapid evolution of LLMs. For instance, a "Dev" environment might use a smaller, faster model for iteration, while "Prod" uses a larger, more capable model for final code generation.
+Tool Definitions: The config should list the enabled tools (e.g., system.ai.python_exec for code execution, or custom retrieval tools).18 This dynamic loading of tools enables the agent's capabilities to be extended via configuration.17 For example, a configuration flag could enable or disable a tool that allows the agent to execute SQL queries, providing a safety mechanism to restrict the agent's capabilities in sensitive environments.
+Pipeline Settings Templates: Since the agent creates DLT pipelines, the config schema must include templates for pipeline settings, such as target_schema, cluster_id (or serverless configuration), and edition (Core, Pro, Advanced).19 These templates serve as the blueprint for the agent's output, ensuring that generated pipelines conform to organizational standards for resource usage and naming conventions.
+Contextual Variables: Variables that change across deployments, such as catalog_name or volume_path, should be parameterized in the config to support isolation between environments.15 This allows the same agent code to be deployed to different environments simply by applying a different configuration file.
+1.3 Prompt Template Design
+Prompt engineering is the primary mechanism for controlling the agent's behavior. Task 1.3, "Prompt Template Design," involves creating structured, modular prompts that guide the LLM's reasoning process. The design of these templates is as critical as the design of the software architecture itself.
+Modular Prompt Architecture
+Monolithic prompts are brittle, hard to debug, and difficult to maintain. The design should utilize a modular approach where the final prompt is assembled from reusable components.
+
+Advanced Prompting Strategies
+To ensure high-quality code generation, advanced prompting strategies such as Chain-of-Thought (CoT) and Few-Shot Prompting should be embedded in the templates.
+Few-Shot Examples: Including examples of valid DLT code within the prompt significantly improves performance. These examples can be retrieved dynamically from a vector store based on semantic similarity to the current task.24 This dynamic few-shot prompting allows the agent to adapt to different coding styles or DLT patterns (e.g., streaming vs. batch) based on the specific context of the user's request.
+Meta-Prompting: Using an LLM to optimize the prompts themselves can refine the instructions for clarity and effectiveness.20 This recursive improvement process can help identify ambiguities in the prompt templates that lead to suboptimal outputs.
+Jinja2 Templating: Jinja2 is the standard for templating in Python and is natively supported by many LLM frameworks. It allows for logic (loops, conditionals) within the prompt template, enabling complex prompt construction based on the input configuration.26 For example, a template could conditionally include instructions for handling streaming data only if the user's request involves a streaming source.
+1.4 Agent Skeleton
+The "Agent Skeleton" (Task 1.4) converts the architectural decisions into a deployable code structure. This skeleton serves as the scaffolding for the logic developed in subsequent weeks.
+Framework Selection: Mosaic AI Agent Framework
+The recommended approach is to use the Mosaic AI Agent Framework (integrated with MLflow). This framework provides a standardized way to author, log, and deploy agents.9 The agent should be implemented by inheriting from the mlflow.pyfunc.ResponsesAgent interface (or the newer ChatAgent interface). This ensures compatibility with Databricks Model Serving and enables features like streaming tokens and traceability.28
+Project Structure
+The skeleton should follow a standard, modular layout to support maintainability and testing:
+project_root/
+├── src/
+│ ├── agent/
+│ │ ├── init.py
+│ │ ├── agent.py # Main agent logic (ResponsesAgent implementation)
+│ │ ├── tools.py # Definition of custom tools (e.g., Unity Catalog tools)
+│ │ └── prompts.py # Logic for loading and rendering prompt templates
+│ ├── config/
+│ │ ├── config.yaml # Configuration file
+│ │ └── schemas.py # Pydantic models for config validation
+│ └── utils/
+│ └── logging.py # Custom logging setup
+├── tests/
+│ ├── unit/ # Unit tests for individual components
+│ └── integration/ # Integration tests for full agent workflow
+├── notebooks/
+│ └── driver.py # Notebook for interactive development and testing
+├── requirements.txt # Python dependencies
+└── databricks.yml # Asset Bundle definition
+Orchestration with LangChain/LangGraph
+While Mosaic AI provides the serving container, the internal logic is often built using libraries like LangChain or LangGraph. These libraries handle the orchestration of tool calls and state management.17 The skeleton code should initialize the LangChain agent, bind the Unity Catalog tools, and define the execution graph (if using LangGraph for stateful multi-step workflows). This graph-based approach allows for complex reasoning loops, where the agent can plan, execute, observe, and refine its actions.
+Observability via MLflow Tracing
+From the very beginning, MLflow Tracing must be enabled. This provides observability into the agent's execution, capturing the inputs, outputs, and latency of each step (LLM call, tool execution, retrieval).30 This tracing capability is critical for debugging the complex interactions inherent in agentic systems and provides the data needed for the "Evaluation & Iterate" phase later in the project.
+1.5 Validation Rules
+Task 1.5, "Validation Rules," focuses on establishing the criteria for "correctness" before any code is generated. This involves defining the structural and semantic constraints of the inputs and outputs.
+Input Validation
+The inputs to the agent (e.g., a request to create a pipeline) must be validated against a schema. Pydantic is the industry standard for this in Python.32 The validation module should define Pydantic models for user requests, ensuring that required fields (e.g., source table names, transformation logic descriptions) are present and correctly typed. This prevents the agent from wasting resources on malformed requests.
+Code Integrity Verification
+Validating the agent's output (generated code) requires a multi-layered approach.
+Syntactic Validity: The system must define rules to check if the generated Python or SQL code is syntactically correct. This can be achieved using Python's ast module (Abstract Syntax Tree) to parse the code without executing it.33 If the AST parser raises a SyntaxError, the code is immediately flagged as invalid.
+Semantic Validity: Validation rules should check for the presence of required DLT decorators (e.g., @dlt.table) and necessary imports (import dlt or from pyspark import pipelines).35
+Security Constraints: Rules must be defined to prevent the injection of malicious code or the usage of unauthorized libraries. This can be enforced by scanning the AST for forbidden function calls (e.g., os.system, subprocess).36 This static analysis acts as a critical security guardrail, ensuring that the generated code adheres to organizational safety standards.
+Phase 2: Core Development and Generation (Week 2)
+Week 2 focuses on the core functionality: the "brain" of the system. This involves integrating with the LLM, enforcing structured outputs, and implementing the logic that actually writes the DLT pipelines. This phase transitions the agent from a passive receiver of instructions to an active generator of code.
+2.1 OpenAI Integration
+Task 2.1, "OpenAI Integration," sets up the communication channel with the Large Language Model. While the task name references "OpenAI," in the Databricks context, this refers to the Databricks Foundation Model APIs which utilize an OpenAI-compatible schema.9
+Abstracted Client Implementation
+The llm_client.py module should act as an abstraction layer for API interactions.
+Client Configuration: The module should utilize the databricks-openai or standard openai Python package, configured to point to the Databricks serving endpoint.18 Authentication is handled automatically via the WorkspaceClient or environment variables within the Databricks compute environment, simplifying the security model.8
+Model Agnosticism: The client should allow for seamless switching between models via the configuration file defined in Week 1. This flexibility allows the system to utilize different models for different tasks—for example, a highly capable model like DBRX for complex reasoning and code generation, and a faster, lighter model like Llama 3 for summarization or simple validation tasks.
+Streaming and Retries: To enhance responsiveness, the client should support streaming responses, which the Mosaic AI Agent Framework facilitates.28 Additionally, robust retry logic with exponential backoff should be implemented to handle transient API failures or rate limits, ensuring the reliability of the agent.
+Function Calling Capability
+The integration must support "Function Calling" (or Tool Use). The client needs to be capable of serializing Python function definitions (from Unity Catalog or local code) into the JSON schema format expected by the LLM, and deserializing the LLM's tool call requests.39 This capability transforms the LLM from a text generator into an orchestrator that can actively interact with the Databricks environment.
+2.2 JSON Output Enforcement
+LLMs are probabilistic and notoriously difficult to control. Task 2.2, "JSON Output Enforcement," is critical for ensuring the agent produces machine-readable code and configuration, not just free text.
+Structured Outputs with Pydantic
+Recent advancements in LLM APIs support "Structured Outputs" or "JSON Mode," which guarantees that the model's response adheres to a provided JSON schema.22
+Pydantic Integration: The recommended approach is to define the desired output structure using Pydantic models. For example, a PipelineDefinition model could contain fields for pipeline_name, target_schema, and a list of TableDefinition objects. These models can be auto-generated into JSON schemas and passed to the LLM.32 This ensures that the output is strictly typed and validated against the expected schema.
+Reflection Loop: Even with Structured Outputs, validation failures can occur. The implementation should include a retry mechanism that feeds the validation error (e.g., "Field 'table_name' is missing") back to the LLM, asking it to correct the JSON. This "reflection" loop is a key pattern in robust agentic systems, allowing the agent to self-correct and improve its success rate.2
+2.3 DLT Code Generator
+Task 2.3, "DLT Code Generator," is the core generative engine. This module takes the structured intent (from Task 2.2) and converts it into valid Delta Live Tables code.
+Metaprogramming and Generation Strategy
+Rather than asking the LLM to write raw text, a more reliable approach is to use the LLM to generate the metadata or abstract syntax of the pipeline, and then use a deterministic code generator to render the final Python code.41
+Prompting for Code: If direct code generation is required, the prompt must be heavily constrained with specific DLT syntax examples. The prompt should explicitly instruct the model to use the modern pyspark.pipelines module (or dlt module) and correct decorators (@dlt.table, @dlt.materialized_view).21
+Handling Complexity: The generator needs to handle various DLT patterns:
+Streaming vs. Batch: Distinguishing between @dlt.table (streaming) and @dlt.materialized_view (batch) based on input requirements.42 The generator must correctly identify whether the source is a streaming source (e.g., Auto Loader) or a static table.
+Data Quality: Generating data quality constraints using @dlt.expect decorators.44 The agent should be able to infer expectations from the data profile or user requirements (e.g., "ensure id is not null").
+Auto Loader Integration: Generating code that utilizes cloud_files for efficient ingestion, including configuring schema evolution and format options.43
+Code Modularity
+The generator should produce modular code. Rather than one massive file, it may be beneficial to generate separate modules for Bronze, Silver, and Gold layers, or use a "factory" pattern where a single generic Python script generates tables dynamically based on a configuration list.45 This modularity improves maintainability and allows for easier testing of individual components.
+2.4 Pipeline Config Generator
+A DLT pipeline requires a settings file (often pipeline.json) to run. Task 2.4 involves generating this configuration programmatically.
+JSON Schema Construction
+The Databricks Pipelines API expects a specific JSON structure. The generator must construct this JSON object, populating fields such as:
+name: The pipeline name.
+storage: The DBFS/S3 location for checkpoints and tables.
+libraries: The paths to the notebook or Python source code generated in Task 2.3.
+target: The target database schema (Unity Catalog schema).
+clusters: Compute configuration (or serverless: true for serverless pipelines).19
+Serverless Default
+Given the strategic shift towards serverless, the generator should default to Serverless DLT. This simplifies configuration by removing the need to specify complex cluster attributes like node types, autoscaling policies, and driver sizes.48 However, the generator should allow for "classic" compute configuration via the config file if specific instance types or policies are required.50
+2.5 Rendering Layer
+The "Rendering Layer" (Task 2.5) bridges the gap between the structured data (Task 2.2) and the final code files (Task 2.3).
+Jinja2 Template Engine
+Jinja2 is the industry-standard templating engine for Python and is ideal for this task.26
+Template Design: Create dlt_template.py.jinja files that contain the skeleton of a DLT pipeline (imports, setup) with placeholders for table definitions.
+Example: {% for table in tables %} @dlt.table(...) def {{table.name}}():... {% endfor %}.
+Logic Separation: This approach strictly separates the code structure (template) from the logic (LLM). The LLM populates the variables (table names, queries), and Jinja2 ensures the syntax structure remains valid.52 This reduces syntax errors significantly compared to pure LLM generation and allows for the standardization of coding practices across all generated pipelines.
+Phase 3: Persistence and Versioning (Week 3)
+With the code generated, the next challenge is persistent storage and version control. This phase moves the artifacts from the agent's memory to the Databricks Workspace and Git ecosystem, establishing the "source of truth."
+3.1 File Storage Layer
+Task 3.1 involves defining where and how the generated files are stored before they are committed to Git.
+Workspace Files and Volumes
+Databricks Workspace Files (files stored directly in the workspace, distinct from DBFS) are the preferred location for source code. They support standard file system operations and are directly integrated with Git Folders.53 Alternatively, Unity Catalog Volumes can be used for staging intermediate artifacts, large configuration files, or data files that accompany the code.8 The storage layer logic must handle directory creation, file writing, and path management, ensuring that files are organized logically (e.g., by pipeline name or run ID).
+3.2 Workspace Writer
+The "Workspace Writer" (Task 3.2) is the software component that physically writes the bytes to the storage layer.
+Databricks SDK Integration
+The databricks-sdk is the primary tool for this operation. The WorkspaceClient provides methods like w.workspace.upload (or w.files.upload for volumes) to write content programmatically.56
+Implementation Details: The writer function should take a file path and content (string or bytes), encode it (if necessary), and use the SDK to write it to the specified location in the Workspace (e.g., /Workspace/Users/agent/generated_pipeline/pipeline.py).
+Concurrency and Error Handling: The implementation must handle potential issues such as directories not existing (creating them recursively) or files being locked by other processes. It should also implement checks to prevent overwriting existing files unless explicitly authorized, ensuring data safety.
+3.3 Git Integration
+The generated code must be version-controlled to enable collaboration and rollback. Task 3.3, "Git Integration," automates the interaction with Databricks Git Folders (formerly Repos).
+Managing Git Folders via API
+Databricks exposes APIs to manage Git Folders. The w.repos API in the SDK allows the agent to interact with the version control system.
+Update: The agent can pull the latest changes from the remote to ensure a clean state (w.repos.update) before making changes.
+Commit and Push Strategy: While the SDK handles repo management, performing commits and pushes usually involves using the Git CLI feature within Databricks or specific API endpoints provided by the Git provider (GitHub/Azure DevOps) if the Databricks API doesn't fully support the "commit" action programmatically in all contexts. A robust pattern is to write files to the path mapped to the Git Folder (e.g., /Workspace/Repos/production/my_pipeline), and then use a separate automation step (or the Git provider's API) to trigger the commit/PR process.58
+Sparse Checkout: Databricks Git Folders now support sparse checkout, which can be useful for large repositories where the agent only needs to interact with a specific subdirectory.59
+3.4 Versioning Rules
+Automated generation requires strict versioning (Task 3.4) to prevent chaos and ensure traceability.
+Semantic Versioning and Branching
+Branching Strategy: The agent should never push directly to the main branch. Instead, it should create a feature branch (e.g., feature/agent-gen-<timestamp>) for every generation run.58 This allows human review via Pull Requests before code is merged into production.
+Tagging and Metadata: Generated pipelines should be tagged with metadata, such as the run ID or the hash of the source prompt. This enables "lineage" for the code itself, allowing developers to trace the generated code back to the specific prompt and configuration that created it.1
+Data Lineage: Utilizing Unity Catalog's lineage capabilities, the system should track which agent version created which table version, providing a complete audit trail from the AI model to the data asset.12
+3.5 Syntax Validation
+Before committing code, it must be validated (Task 3.5). Committing broken code breaks the CI/CD pipeline and wastes developer time.
+Static Analysis with AST
+The ast module in Python is the most robust way to validate syntax programmatically without executing the code.33
+Validator Implementation: The validator should parse the generated code string using ast.parse(). If this raises a SyntaxError, the code is immediately flagged as invalid, and the agent can retry the generation step.
+Advanced Structural Checks: Beyond basic syntax, ast.NodeVisitor can be used to enforce specific rules. For example, a visitor can check that the file contains exactly one @dlt.table decorator per function, or that it does not contain forbidden functions like print() (which can clutter logs in production).61
+Linting Integration: Integrating a linter like ruff or flake8 (via library calls) can further ensure code quality and style adherence before the code is ever saved to the repo, ensuring that the AI-generated code meets human coding standards.
+Phase 4: Deployment and Testing (Week 4)
+Once the code is generated, stored, and validated, it must be deployed and tested. This phase focuses on the operational aspects of the DLT pipeline, ensuring that it runs correctly and produces valid data.
+4.1 DLT Pipeline API
+Task 4.1 involves interacting with the DLT pipeline lifecycle programmatically.
+Pipeline Lifecycle Management
+The w.pipelines service in the Databricks SDK allows for creating, editing, and deleting pipelines.63
+Create: w.pipelines.create() takes the JSON configuration generated in Week 2 and creates the pipeline object in the workspace.
+Start: w.pipelines.start_update() triggers a run. The agent needs logic to decide whether to run a "Full Refresh" (reprocessing all data) or an incremental update based on the user request and the pipeline's state.65
+4.2 Initial Deployment
+"Initial Deployment" (Task 4.2) is the first actual run of the generated code.
+Deployment Strategy
+Development Mode: The pipeline should initially be deployed in "Development" mode. This keeps the cluster active for faster iteration and disables some production retries, allowing for quicker feedback on errors.42
+Target Environment: The deployment should target a "Dev" schema in Unity Catalog (e.g., dev_catalog.agent_schema) to avoid impacting production data. This isolation is critical for safely testing generated code.
+4.3 Pipeline Update Logic
+Pipelines are not static; they evolve. Task 4.3 deals with updating existing pipelines.
+Stateful Updates and Evolution
+The agent needs logic to determine if a pipeline already exists (by name or ID).
+Edit vs. Create: If the pipeline exists, the agent should use w.pipelines.update() instead of creating a new one.
+Schema Evolution: DLT handles schema evolution automatically for many changes, but the agent must understand destructive changes (e.g., column renames/drops) and potentially warn the user or trigger a full refresh to ensure data consistency.66
+4.4 Diff Algorithm
+To understand what changed, Task 4.4 requires a "Diff Algorithm."
+Code Comparison and Visualization
+Using Python's difflib, the system can compare the newly generated code against the current code in the repo/workspace.67
+Semantic Diffs: Ideally, the diff should be intelligent. Instead of just line-by-line diffs, an "AI Code Review" agent could explain the changes in natural language (e.g., "Added a new silver table for 'orders'"). This turns the diff into a narrative explanation of the change.69
+Visualizing Diffs: These diffs should be presented to the user (if human-in-the-loop) or logged to MLflow/Unity Catalog for audit purposes, allowing users to understand the evolution of the pipeline over time.
+4.5 Automated Tests
+Task 4.5, "Automated Tests," ensures the pipeline actually works and produces correct data.
+Unit and Integration Testing Strategy
+Unit Tests: Testing individual transformation functions using pytest. The agent can generate unit tests that mock the input DataFrames and assert the output schema/data, verifying the logic in isolation.71
+DLT Expectations: The primary testing mechanism in DLT is "Expectations" (Data Quality rules). The agent should automatically generate expectations (e.g., EXPECT (id IS NOT NULL)) based on the data profile or schema definition.73
+Integration Tests: Running a pipeline update and querying the event log (event_log table) to check for failures or data quality violations is a powerful integration test.72
+LLM-as-a-Judge
+A cutting-edge approach is using "LLM-as-a-Judge" to evaluate the code quality or the reasoning of the agent itself. A separate judge agent evaluates the generated code against best practices and security guidelines, assigning a pass/fail score and providing feedback for improvement.75
+Phase 5: Automation and Operationalization (Week 5)
+The final phase transforms the system from a "tool" to a "platform capability," integrating it into the enterprise CI/CD and operational landscape.
+5.1 CI/CD Pipeline
+Task 5.1 establishes the Continuous Integration/Continuous Deployment pipeline.
+Databricks Asset Bundles (DABs)
+DABs are the modern standard for CI/CD on Databricks.77
+Bundle Structure: The project should be structured as a Bundle (databricks.yml). This defines the pipelines, jobs, and environment configurations in a declarative manner.
+Workflow:
+Dev: The agent generates code and commits it to a Feature Branch.
+CI (GitHub Actions): On Pull Request, the CI system runs Unit Tests (pytest), runs bundle validate, and executes the Linter.
+CD: On Merge to Main, the system executes bundle deploy to update the Staging/Prod environments.79
+Advantages over Terraform: While Terraform is excellent for infrastructure (workspaces, groups), DABs are superior for application logic (jobs, pipelines) as they understand the Databricks runtime context and support development workflows directly.81
+5.2 Workflow Automation
+Task 5.2, "Workflow Automation," refers to the orchestration of the agent's own execution.
+Databricks Jobs
+The agent itself (the code generator) can be deployed as a Databricks Job.
+Triggering: The job can be triggered via webhook (e.g., from a Slack command or a custom UI), creating an on-demand code generation service.
+Multi-Task Jobs: A multi-task job can orchestrate the entire sequence: Fetch Request -> Generate Code -> Validate Syntax -> Run Unit Tests -> Commit to Git. This ensures that the entire process is atomic and observable.16
+5.3 UAT & Smoke Testing
+User Acceptance Testing (Task 5.3) verifies the system meets user needs.
+Agent Evaluation
+Mosaic AI Agent Evaluation should be used to rigorously test the agent's performance.
+Evaluation Set: Create a "Golden Dataset" of user queries (e.g., "Create a pipeline for X", "Ingest data from Y") and the expected DLT code.
+Metrics: Measure correctness (does the code run?), latency, and safety (no PII leaks). The "Review App" allows stakeholders to provide feedback (thumbs up/down) on the agent's outputs, which can be used to fine-tune the prompts over time.9
+5.4 Documentation
+Task 5.4 ensures the system is maintainable.
+Automated Documentation
+The agent can be tasked with documenting itself.
+Code Comments: The code generator should include docstrings in the generated Python/SQL, explaining the logic of each transformation.
+README Generation: An LLM call can generate a README.md for the generated pipeline, explaining the data flow, dependencies, and schema.
+Lineage Graphs: Unity Catalog automatically generates lineage graphs, which serve as visual documentation of the data flow, reducing the need for manual diagramming.12
+5.5 Final Demo & Handover
+The final step is the handover.
+Deliverable Artifacts
+The handover package should include:
+The Agent Source Code (Git repo).
+The config.yaml templates and Prompt Library.
+The CI/CD workflow definitions (.github/workflows/).
+The Operational Runbooks (how to debug, how to update the model).
+A demo recording showing the "Prompt-to-Pipeline" flow to train end-users.
+Conclusion
+This 5-week plan outlines a rigorous path to building a sophisticated Agentic AI system on Databricks. By leveraging Unity Catalog for governance, Mosaic AI for agent development and evaluation, and Delta Live Tables for the data processing engine, the architecture ensures scalability, reliability, and security. The key differentiator in this approach is the heavy reliance on configuration-as-code, automated validation (AST), and CI/CD best practices (DABs), transforming the agent from a stochastic prototype into a deterministic enterprise asset. The move from manual coding to agentic generation shifts the role of the data engineer towards architecture and auditing, utilizing the AI as a powerful force multiplier to accelerate data delivery.
+Key Data Structures and Patterns Summary
+Works cited
+Agent system design patterns | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/generative-ai/guide/agent-system-design-patterns
+Agentic AI Design Patterns that 90% of Teams Use | by Neelamyadav | Oct, 2025, accessed on November 29, 2025, https://medium.com/@neelamyadav10053/agentic-ai-design-patterns-that-90-of-teams-use-03b3bb481d62
+AI Agents | Databricks, accessed on November 29, 2025, https://www.databricks.com/glossary/ai-agents
+Multi-Agent Supervisor Architecture: Orchestrating Enterprise AI at Scale | Databricks Blog, accessed on November 29, 2025, https://www.databricks.com/blog/multi-agent-supervisor-architecture-orchestrating-enterprise-ai-scale
+AI agent tools | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/generative-ai/agent-framework/agent-tool
+How Mosaic AI Enables the Next Generation of Agentic Systems - Cloudaeon, accessed on November 29, 2025, https://www.cloudaeon.com/insight/how-mosaic-ai-enables-the-next-generation-of-agentic-systems-
+What is Unity Catalog? | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/data-governance/unity-catalog/
+Databricks SDK for Python, accessed on November 29, 2025, https://docs.databricks.com/aws/en/dev-tools/sdk-python
+Mosaic AI Agent Framework - Databricks, accessed on November 29, 2025, https://www.databricks.com/product/machine-learning/retrieval-augmented-generation
+Build and deploy quality AI agent systems - Databricks, accessed on November 29, 2025, https://www.databricks.com/product/artificial-intelligence
+How Databricks is Revolutionizing Generative AI Workflows in 2025 - Kanerika, accessed on November 29, 2025, https://kanerika.com/blogs/databricks-generative-ai/
+Exploring the Future of Databricks Data Lineage Capabilities 2025 - Kanerika, accessed on November 29, 2025, https://kanerika.com/blogs/databricks-data-lineage/
+Data Lineage With Unity Catalog - Databricks, accessed on November 29, 2025, https://www.databricks.com/resources/demos/videos/lakehouse-platform/data-lineage-with-unity-catalog
+CI/CD on Databricks, accessed on November 29, 2025, https://docs.databricks.com/aws/en/dev-tools/ci-cd/
+Lecture 8: CI/CD & Deployment Strategies | by Başak Tuğçe Eskili | Marvelous MLOps, accessed on November 29, 2025, https://medium.com/marvelous-mlops/lecture-8-ci-cd-deployment-strategies-71dbdd455299
+How does Databricks support CI/CD for machine learning?, accessed on November 29, 2025, https://docs.databricks.com/aws/en/machine-learning/mlops/ci-cd-for-ml
+Tutorial: Build, evaluate, and deploy a retrieval agent | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/generative-ai/tutorials/agent-framework-notebook
+Get started with AI agents | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/generative-ai/tutorials/agent-quickstart
+Pipeline properties reference - Azure Databricks - Microsoft Learn, accessed on November 29, 2025, https://learn.microsoft.com/en-us/azure/databricks/ldp/properties
+A universal prompt template to improve LLM responses: just fill it out and get clearer answers - Reddit, accessed on November 29, 2025, https://www.reddit.com/r/PromptEngineering/comments/1lnsu1q/a_universal_prompt_template_to_improve_llm/
+Lakeflow Spark Declarative Pipelines Python language reference | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/ldp/developer/python-ref
+How to use structured outputs with Azure OpenAI in Microsoft Foundry Models, accessed on November 29, 2025, https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/structured-outputs?view=foundry-classic
+Structured model outputs - OpenAI API, accessed on November 29, 2025, https://platform.openai.com/docs/guides/structured-outputs
+Generative AI Architecture Patterns - Databricks, accessed on November 29, 2025, https://www.databricks.com/product/machine-learning/build-generative-ai
+Introducing the Prompt Engineering Toolkit | Uber Blog, accessed on November 29, 2025, https://www.uber.com/en-SE/blog/introducing-the-prompt-engineering-toolkit/
+Template Designer Documentation — Jinja Documentation (3.1.x), accessed on November 29, 2025, https://jinja.palletsprojects.com/en/stable/templates/
+Jinja Templating in Python: A Practical Guide - Better Stack, accessed on November 29, 2025, https://betterstack.com/community/guides/scaling-python/jinja-templating/
+Author AI agents in code | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/generative-ai/agent-framework/author-agent
+Harnessing Databricks Mosaic AI Agent Framework and Arize for Next-Level GenAI Applications, accessed on November 29, 2025, https://arize.com/blog/harnessing-databricks-mosaic-ai-agent-framework-and-arize-for-next-level-genai-applications/
+Get started with AI agents In DATABRICKS | Beginners Guide, accessed on November 29, 2025, https://www.youtube.com/watch?v=99T20B5c5Ww
+Generative AI app developer workflow - Azure Databricks | Microsoft Learn, accessed on November 29, 2025, https://learn.microsoft.com/en-us/azure/databricks/generative-ai/tutorials/ai-cookbook/genai-developer-workflow
+Extract Entities Using Azure OpenAI Structured Outputs Mode | Microsoft Learn, accessed on November 29, 2025, https://learn.microsoft.com/en-us/azure/developer/ai/how-to/extract-entities-using-structured-outputs
+isidentical/astvalidate: Easy AST Validation - GitHub, accessed on November 29, 2025, https://github.com/isidentical/astvalidate
+How to check syntax of Python file/script without executing it? - Stack Overflow, accessed on November 29, 2025, https://stackoverflow.com/questions/4284313/how-to-check-syntax-of-python-file-script-without-executing-it
+Lakeflow Spark Declarative Pipelines Python language reference - Azure Databricks, accessed on November 29, 2025, https://learn.microsoft.com/en-us/azure/databricks/ldp/developer/python-ref
+ast — Abstract syntax trees — Python 3.14.0 documentation, accessed on November 29, 2025, https://docs.python.org/3/library/ast.html
+Identifying and Reducing Test Case Combinatorial Explosions with Python's Abstract Syntax Tree (AST) and Pytest Framework - CODE Magazine, accessed on November 29, 2025, https://www.codemag.com/Article/2507081/Identifying-and-Reducing-Test-Case-Combinatorial-Explosions-with-Python%E2%80%99s-Abstract-Syntax-Tree-AST-and-Pytest-Framework
+Databricks Utilities with Databricks Connect for Python - Azure Databricks | Azure Docs, accessed on November 29, 2025, https://docs.azure.cn/en-us/databricks/dev-tools/databricks-connect/python/databricks-utilities
+Agents: Mosaic AI, Tools, and Function Calling | by AI on Databricks - Medium, accessed on November 29, 2025, https://medium.com/@AI-on-Databricks/agents-mosaic-ai-tools-and-function-calling-2530c841f80c
+Comprehensive Guide to Mosaic AI: Getting GenAI Apps to Production on Databricks, accessed on November 29, 2025, https://www.youtube.com/watch?v=GdPyLDMHPS4
+Metaprogramming Databricks: Generating Delta Live Tables(DLT) Dynamically - Medium, accessed on November 29, 2025, https://medium.com/@imran.akbar1995/metaprogramming-databricks-generating-delta-live-tables-dlt-dynamically-1fa8f78951eb
+Delta Live Tables | Primer. This story can serve you as a starting… | by Muarif - Medium, accessed on November 29, 2025, https://medium.com/@maurif16/delta-live-tables-primer-31dbfaf2bd5b
+Databricks DLT: Getting Started Guide, accessed on November 29, 2025, https://www.databricks.com/discover/pages/getting-started-with-delta-live-tables
+Delta Live Tables To Build Reliable Maintenance-Free Pipelines - ProjectPro, accessed on November 29, 2025, https://www.projectpro.io/article/delta-live-tables/719
+Develop pipeline code with Python | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/ldp/developer/python-dev
+Develop pipeline code with Python - Azure Databricks, accessed on November 29, 2025, https://docs.azure.cn/en-us/databricks/delta-live-tables/python-dev
+Create a pipeline | Pipelines API | REST API reference | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/api/workspace/pipelines/create
+Configure a serverless pipeline | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/ldp/serverless
+Configure a serverless pipeline - Azure Databricks - Microsoft Learn, accessed on November 29, 2025, https://learn.microsoft.com/en-us/azure/databricks/ldp/serverless
+Configure classic compute for pipelines | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/ldp/configure-compute
+Configure classic compute for pipelines - Azure Databricks - Microsoft Learn, accessed on November 29, 2025, https://learn.microsoft.com/en-us/azure/databricks/ldp/configure-compute
+how to generate config using jinja2 and a json file in python - Stack Overflow, accessed on November 29, 2025, https://stackoverflow.com/questions/63192167/how-to-generate-config-using-jinja2-and-a-json-file-in-python
+Import Python modules from Git folders or workspace files | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/ldp/import-workspace-files
+Programmatically interact with workspace files | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/files/workspace-interact
+Upload a file - Databricks Apps Cookbook, accessed on November 29, 2025, https://apps-cookbook.dev/docs/dash/volumes/volumes_upload/
+w.workspace: Workspace — Databricks SDK for Python beta documentation, accessed on November 29, 2025, https://databricks-sdk-py.readthedocs.io/en/latest/workspace/workspace/workspace.html
+w.files: Files — Databricks SDK for Python beta documentation - Read the Docs, accessed on November 29, 2025, https://databricks-sdk-py.readthedocs.io/en/latest/workspace/files/files.html
+CI/CD with Databricks Git folders, accessed on November 29, 2025, https://docs.databricks.com/aws/en/repos/ci-cd
+Databricks Git folders | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/repos/
+w.repos: Repos — Databricks SDK for Python beta documentation - Read the Docs, accessed on November 29, 2025, https://databricks-sdk-py.readthedocs.io/en/stable/workspace/workspace/repos.html
+AST-Driven Python Testing - Jazzberry, accessed on November 29, 2025, https://jazzberry.ai/blog/ast-driven-python-testing
+Analyzing Python Code with Python - placeholder, accessed on November 29, 2025, https://rotemtam.com/2020/08/13/python-ast/
+Pipelines API | REST API reference | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/api/workspace/pipelines
+pipelines package - github.com/databricks/databricks-sdk-go/service/pipelines - Go Packages, accessed on November 29, 2025, https://pkg.go.dev/github.com/databricks/databricks-sdk-go/service/pipelines
+Delta Live Tables — Databricks SDK for Python beta documentation, accessed on November 29, 2025, https://databricks-sdk-py.readthedocs.io/en/latest/dbdataclasses/pipelines.html
+MERGE INTO | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/sql/language-manual/delta-merge-into
+difflib — Helpers for computing deltas — Python 3.14.0 documentation, accessed on November 29, 2025, https://docs.python.org/3/library/difflib.html
+Creating a Git-Like Diff Viewer in Python Using Difflib - Tim Santeford, accessed on November 29, 2025, https://www.timsanteford.com/posts/creating-a-git-like-diff-viewer-in-python-using-difflib/
+Build 30 for 30 Day 02: Git Diff Explainer | by Jason Dookeran - Medium, accessed on November 29, 2025, https://jdookeran.medium.com/build-30-for-30-day-02-git-diff-explainer-115cbe62329e
+AI Code Review for Data Pipelines: Using GPT to Catch Performance and Cost Issues, accessed on November 29, 2025, https://medium.com/@manik.ruet08/ai-code-review-for-data-pipelines-using-gpt-to-catch-performance-and-cost-issues-1546010196c3
+Unit testing for notebooks - Azure Databricks - Microsoft Learn, accessed on November 29, 2025, https://learn.microsoft.com/en-us/azure/databricks/notebooks/testing
+Applying software development & DevOps best practices to Delta Live Table pipelines, accessed on November 29, 2025, https://www.databricks.com/blog/applying-software-development-devops-best-practices-delta-live-table-pipelines
+Databricks – DLT – expect, pytest vs dbt test – Top Guides – Data School, accessed on November 29, 2025, https://topguides.in/databricks-dlt-expect-pytest-vs-dbt-test/
+Dynamic Data Quality Rule Generation using LLM in Databricks - LatentView Analytics, accessed on November 29, 2025, https://www.latentview.com/blog/dynamic-data-quality-rule-generation-using-llm-in-databricks/
+accessed on November 29, 2025, https://learn.microsoft.com/en-us/azure/databricks/mlflow3/genai/eval-monitor/concepts/scorers#:~:text=to%20the%20trace-,LLMs%20as%20judges,based%20on%20criteria%20you%20define.
+Scorers and LLM judges | Databricks on AWS, accessed on November 29, 2025, https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/concepts/scorers
+What are Databricks Asset Bundles?, accessed on November 29, 2025, https://docs.databricks.com/aws/en/dev-tools/bundles/
+DATABRICKS ASSET BUNDALS VS TERRAFORM - Microsoft Q&A, accessed on November 29, 2025, https://learn.microsoft.com/en-us/answers/questions/5515445/databricks-asset-bundals-vs-terraform
+Best practices and recommended CI/CD workflows on Databricks, accessed on November 29, 2025, https://docs.databricks.com/aws/en/dev-tools/ci-cd/best-practices
+CI/CD Strategies For Databricks Asset Bundles - Extended Guide - SIRI Analytics Docs, accessed on November 29, 2025, https://docs.siri-ai.com/blog/ci_cd_strategies_for_databricks_asset_bundles_extended
+Terraform vs. Databricks Asset Bundles | by Alex Ott - Medium, accessed on November 29, 2025, https://medium.com/@alexott_en/terraform-vs-databricks-asset-bundles-6256aa70e387
+Databricks Asset Bundles - New Math Data, accessed on November 29, 2025, https://newmathdata.com/blog/databricks-asset-bundles-dabs-vs-terraform-deployment-guide/
+Care Cost Compass: An Agent System Using Mosaic AI Agent Framework | Databricks Blog, accessed on November 29, 2025, https://www.databricks.com/blog/care-cost-compass-agent-system-using-mosaic-ai-agent-framework
